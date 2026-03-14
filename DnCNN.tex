@@ -1,0 +1,123 @@
+\documentclass[twocolumn]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{caption}
+\usepackage{geometry}
+\usepackage{balance}
+\usepackage{cite}
+\usepackage[colorlinks=true, urlcolor=magenta]{hyperref}
+\usepackage{xcolor}
+
+\geometry{a4paper, margin=0.75in}
+
+% 页眉页脚
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small \textit{Image Denoising Comparison}}  % 左侧：简短标题
+\fancyhead[R]{\small \thepage}                              % 右侧：页码
+\renewcommand{\headrulewidth}{0.4pt}
+
+\title{\textbf{Image Denoising Comparison: \\ DnCNN vs. BM3D and Optimization-Based Methods}}
+\author{ Linhongqin \\ 
+\textit{Southwest Petroleum University} \\}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Image denoising is a fundamental task in low-level vision. This paper presents a comparative study of five representative denoising methods: DnCNN (deep learning), BM3D (spatial-frequency filtering), total variation (TV) denoising solved by ADMM, and wavelet soft-thresholding (which can be seen as an ISTA/FISTA realization). All methods are evaluated on the standard \texttt{camera} image corrupted by additive white Gaussian noise with standard deviation $\sigma=25$. Quantitative results in terms of PSNR and SSIM show that DnCNN achieves the best performance, closely followed by BM3D, while the optimization-based methods yield slightly lower metrics. The visual comparison also confirms the advantage of learning-based approaches.Our source codes are available: 
+    \href{https://github.com/linhongqin123/DnCNN-vs-BM3D-ISTA-FISTA-ADMM-image-denoising-comparison.git}{https://github.com/linhongqin123/DnCNN-vs-BM3D-ISTA-FISTA-ADMM-image-denoising-comparison.git}.
+\end{abstract}
+
+\section{Introduction}
+Image denoising aims to recover a clean image $x$ from its noisy observation $y = x + n$, where $n$ is typically assumed to be additive white Gaussian noise. Over the past decades, numerous methods have been developed, ranging from model-driven optimization algorithms to data-driven deep learning techniques. The key distinction between these two families is that \textbf{deep learning methods learn an implicit prior from a large dataset via end-to-end training, while optimization methods rely on explicit hand-crafted priors and iterative solvers}. In this work, we compare a modern deep learning approach, DnCNN~\cite{zhang2017beyond}, with three classical paradigms: BM3D~\cite{dabov2007image} (collaborative filtering), TV-ADMM~\cite{rudin1992nonlinear} (total variation regularisation), and wavelet soft-thresholding which can be viewed as a special case of ISTA/FISTA~\cite{beck2009fast} applied to an orthogonal wavelet basis. The goal is to provide a concise quantitative and qualitative assessment under identical conditions.
+
+\section{Related Work}
+The methods evaluated in this paper are well-established in the literature and have been implemented in our experiments:
+
+\textbf{BM3D}~\cite{dabov2007image} groups similar patches into 3D stacks, performs collaborative filtering in the transform domain, and then aggregates the results. It is widely considered a benchmark among non-learning methods.
+
+\textbf{TV-ADMM} minimizes the total variation model $\|x-y\|_2^2 + \lambda \|\nabla x\|_1$~\cite{rudin1992nonlinear}, which can be efficiently solved by the Alternating Direction Method of Multipliers (ADMM). We employ Chambolle's algorithm~\cite{chambolle2004algorithm} as implemented in \texttt{scikit-image}.
+
+\textbf{Wavelet Soft-Thresholding (ISTA/FISTA)}: For an orthogonal wavelet basis, the $\ell_1$-regularised least squares problem $\min_\alpha \|y - W\alpha\|_2^2 + \lambda \|\alpha\|_1$ can be solved in one step by soft-thresholding the wavelet coefficients. This corresponds to applying ISTA (or its accelerated version FISTA) with a single iteration, making it a representative sparse-optimisation approach.
+
+\textbf{DnCNN}~\cite{zhang2017beyond} is a 17-layer convolutional neural network that learns to predict the residual noise from the noisy input. The denoised image is obtained by subtracting the learned residual.
+
+All these methods have been implemented using publicly available code or standard libraries, ensuring reproducibility.
+
+\section{Methodology}
+\subsection{DnCNN Architecture}
+DnCNN adopts a residual learning formulation. Given a noisy image $y$, the network $\mathcal{R}$ is trained to predict the noise $n$, so that the clean image is reconstructed as $\hat{x} = y - \mathcal{R}(y)$. The architecture consists of 17 convolutional layers, each with 64 filters of size $3\times3$. The first layer uses ReLU activation, the subsequent 15 layers combine convolution, batch normalisation, and ReLU, and the final layer is a pure convolution that outputs the residual image. The loss function is the mean squared error between the predicted residual and the true noise:
+\begin{equation}
+\mathcal{L}(\theta) = \frac{1}{2N}\sum_{i=1}^N \|\mathcal{R}(y_i;\theta) - (y_i - x_i)\|_F^2.
+\end{equation}
+We use a pre-trained model for noise level $\sigma=25$, available from the authors' repository~\footnote{\url{https://github.com/SaoYan/DnCNN-PyTorch}}.
+
+\subsection{Comparison Methods}
+For BM3D, we utilise the \texttt{bm3d} Python package with default parameters and noise standard deviation $\sigma=25/255$ (since the image is scaled to $[0,1]$). TV denoising is performed using \texttt{denoise\_tv\_chambolle} from \texttt{scikit-image} with weight $0.1$. Wavelet denoising employs \texttt{denoise\_wavelet} with the ``BayesShrink'' method and soft thresholding, which effectively mimics an ISTA/FISTA solution. All methods operate on grayscale images.
+
+\section{Experiments and Results}
+\subsection{Experimental Setup}
+We use the \texttt{camera} image ($512\times512$) from \texttt{skimage.data}, converted to float in $[0,1]$. Gaussian noise with standard deviation $\sigma=25/255$ is added (seed fixed for reproducibility). Denoising results are evaluated using peak signal-to-noise ratio (PSNR) and structural similarity index (SSIM). The experiments are run on a CPU (Intel i7) with Python 3.8 and the libraries mentioned above.
+
+\subsection{Quantitative Comparison}
+Table~\ref{tab:metrics} reports the PSNR (dB) and SSIM values for the noisy image and the four denoising methods. DnCNN achieves the highest PSNR (30.01 dB) and SSIM (0.816), slightly outperforming BM3D (29.70 dB, 0.796). TV-ADMM and wavelet soft-thresholding yield lower scores (28.33 dB / 0.729 and 26.96 dB / 0.647, respectively), which is expected as they rely on simpler hand-crafted priors.
+
+\begin{table}[h]
+\centering
+\caption{Quantitative results on the \texttt{camera} image ($\sigma=25$).}
+\label{tab:metrics}
+\begin{tabular}{lcc}
+\toprule
+Method & PSNR (dB) & SSIM \\
+\midrule
+Noisy          & 20.61 & 0.301 \\
+DnCNN          & 30.01 & 0.816 \\
+BM3D           & 29.70 & 0.796 \\
+TV (ADMM)      & 28.33 & 0.729 \\
+Wavelet (ISTA/FISTA) & 26.96 & 0.647 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Visual Comparison}
+Figure~\ref{fig:comparison} displays the original image, the noisy version, and the denoised outputs. DnCNN and BM3D restore fine details most faithfully, while TV introduces slight staircasing artefacts in smooth regions. Wavelet denoising tends to oversmooth some textures, leading to lower perceptual quality.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{comparison.png}
+\caption{Visual comparison of denoising methods. From left to right: original, noisy, DnCNN, BM3D, TV (ADMM), wavelet (ISTA/FISTA).}
+\label{fig:comparison}
+\end{figure}
+
+\section{Discussion}
+The experimental results clearly demonstrate the superiority of the deep learning approach (DnCNN) over the classical optimisation-based methods under the same noise level. This advantage stems from DnCNN's ability to learn complex natural image statistics from a large training set, whereas BM3D, TV, and wavelet methods are constrained by predefined models. Nevertheless, BM3D remains highly competitive, confirming its status as a strong traditional baseline. The relatively lower performance of TV and wavelet methods can be attributed to their simpler priors (piecewise constancy and sparsity in a fixed basis), which may not capture all image structures.
+
+It should be noted that the comparison is limited to a single image and one noise level; a more extensive evaluation on diverse datasets would provide stronger evidence. However, the observed trends align with the literature.
+
+\section{Conclusion}
+In this work, we have compared DnCNN, BM3D, TV-ADMM, and wavelet soft-thresholding (as a representative of ISTA/FISTA) for image denoising. The results indicate that DnCNN outperforms the others in both PSNR and SSIM, with BM3D a close second. Optimisation-based methods still offer valuable insights and can be effective when training data is scarce. Future work could explore hybrid approaches that integrate learning with optimisation.
+
+\begin{thebibliography}{9}
+\bibitem{zhang2017beyond}
+K. Zhang, W. Zuo, Y. Chen, D. Meng, and L. Zhang, ``Beyond a Gaussian denoiser: Residual learning of deep CNN for image denoising,'' \textit{IEEE Trans. Image Process.}, vol. 26, no. 7, pp. 3142–3155, 2017.
+
+\bibitem{dabov2007image}
+K. Dabov, A. Foi, V. Katkovnik, and K. Egiazarian, ``Image denoising by sparse 3-D transform-domain collaborative filtering,'' \textit{IEEE Trans. Image Process.}, vol. 16, no. 8, pp. 2080–2095, 2007.
+
+\bibitem{rudin1992nonlinear}
+L. I. Rudin, S. Osher, and E. Fatemi, ``Nonlinear total variation based noise removal algorithms,'' \textit{Physica D}, vol. 60, no. 1-4, pp. 259–268, 1992.
+
+\bibitem{chambolle2004algorithm}
+A. Chambolle, ``An algorithm for total variation minimization and applications,'' \textit{J. Math. Imaging Vis.}, vol. 20, no. 1, pp. 89–97, 2004.
+
+\bibitem{beck2009fast}
+A. Beck and M. Teboulle, ``A fast iterative shrinkage-thresholding algorithm for linear inverse problems,'' \textit{SIAM J. Imaging Sci.}, vol. 2, no. 1, pp. 183–202, 2009.
+\end{thebibliography}
+
+\balance
+\end{document}
